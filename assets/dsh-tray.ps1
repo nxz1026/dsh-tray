@@ -21,13 +21,17 @@ Add-Type -AssemblyName System.Drawing
 
 # ===== CONFIG (edit here) =====
 $port = 3080
+# Root of the DeepSeek Harness repo. The server is started from here, because
+# `apps/cli/src/bin.ts` is a relative path and `tsx` must resolve from this
+# repo's node_modules. Change this to your harness checkout.
+$workDir = 'E:\2026Workplace\Code\deepseek-harness'
 # Command to start the DSH Web server when it is not running. The first
 # element is resolved via PATH (including .cmd/.ps1 via PATHEXT); the rest are
-# its arguments. Examples:
+# its arguments. Examples (run from $workDir):
+#   @('node', '--import', 'tsx/esm', 'apps/cli/src/bin.ts', 'web', '--port', $port)
+#   @('pnpm', 'dsh', 'web', '--port', $port)
 #   @('dsh', 'web', '--port', $port)              # if `dsh` is on PATH
-#   @('pnpm', 'dsh', 'web', '--port', $port)      # from a project with dsh
-#   @('cmd', '/c', 'pnpm dsh web --port', $port)  # launched through cmd
-$startCommand = @('dsh', 'web', '--port', $port)
+$startCommand = @('node', '--import', 'tsx/esm', 'apps/cli/src/bin.ts', 'web', '--port', $port)
 # Log files for the server output (used by "Show Logs").
 $logOut = Join-Path $env:TEMP 'dsh-tray.out.log'
 $logErr = Join-Path $env:TEMP 'dsh-tray.err.log'
@@ -51,6 +55,7 @@ function Start-Dsh {
         return
     }
     Start-Process -FilePath $exe.Path -WindowStyle Hidden `
+        -WorkingDirectory $workDir `
         -ArgumentList $startCommand[1..($startCommand.Count - 1)] `
         -RedirectStandardOutput $logOut -RedirectStandardError $logErr
 }

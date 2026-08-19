@@ -14,15 +14,20 @@ Web UI / tail logs.
    - `$autoStart` — start the server on launch if it is not already running.
 3. Run it:
    ```sh
-   powershell -File assets/dsh-tray.ps1
+   powershell -File assets\dsh-tray.ps1
    ```
-   or just double-click `dsh-tray.vbs` (runs hidden, no console window) or
-   `dsh-tray.bat` at the repo root. The DSH Web server starts headless and the
-   tray icon appears. Right-click it to control the server.
+   or double-click `dsh-tray.bat` at the repo root (it launches the script
+   hidden). The DSH Web server starts headless and the tray icon appears.
+   Right-click it to control the server.
 
-Requirements: Windows, and the `dsh` CLI on `PATH` (the tray calls `dsh web`).
-If `dsh` is not on `PATH`, edit `$startCommand` in `assets/dsh-tray.ps1` to the
-command that starts your server (see the examples in the CONFIG block).
+Configuration: edit the `CONFIG` block at the top of `assets/dsh-tray.ps1`:
+- `$workDir` — your DeepSeek Harness repo root. The server is started from
+  here so `apps/cli/src/bin.ts` and `tsx` resolve correctly.
+- `$startCommand` — the command that starts the server (default launches the
+  harness via `node --import tsx/esm apps/cli/src/bin.ts web`).
+- `$port`, `$autoStart`.
+
+Requirements: Windows, and `node` on `PATH`.
 
 ## Menu
 
@@ -68,14 +73,19 @@ DeepSeek Harness Web 的 Windows 系统托盘启动器。无需安装:下载(或
    - `$autoStart` — 若服务未运行,启动时自动拉起。
 3. 运行:
    ```sh
-   powershell -File assets/dsh-tray.ps1
+   powershell -File assets\dsh-tray.ps1
    ```
-   或直接双击仓库根目录的 `dsh-tray.vbs`(隐藏运行,无黑框),也可双击 `dsh-tray.bat`。
+   或直接双击仓库根目录的 `dsh-tray.bat`(以隐藏方式拉起脚本)。
    DSH Web 服务以无窗口方式启动,托盘图标随即出现。右键图标即可控制服务。
 
-环境要求:Windows,且 `dsh` CLI 在 `PATH` 中(托盘会调用 `dsh web`)。
-若 `dsh` 不在 `PATH`,编辑 `assets/dsh-tray.ps1` 里的 `$startCommand` 改成你启动服务的命令
-(配置区内有示例)。
+配置:编辑 `assets/dsh-tray.ps1` 顶部的 `CONFIG` 配置区:
+- `$workDir` — 你的 DeepSeek Harness 仓库根目录。服务从这里启动,
+  这样 `apps/cli/src/bin.ts` 与 `tsx` 才能正确解析。
+- `$startCommand` — 启动服务的命令(默认用
+  `node --import tsx/esm apps/cli/src/bin.ts web` 拉起 harness)。
+- `$port`、`$autoStart`。
+
+环境要求:Windows,且 `node` 在 `PATH` 中。
 
 ## 菜单
 
