@@ -1,0 +1,43 @@
+{
+  "name": "dsh-tray",
+  "version": "0.1.0",
+  "description": "Windows system-tray launcher for DeepSeek Harness Web: start/stop/restart/open UI/show logs from the tray icon.",
+  "type": "module",
+  "main": "./src/plugin.js",
+  "exports": {
+    ".": "./src/plugin.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "assets",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "win32"
+  ],
+  "keywords": [
+    "deepseek",
+    "dsh",
+    "deepseek-harness",
+    "tray",
+    "systray",
+    "windows",
+    "launcher"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1"
+  }
+}
