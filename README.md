@@ -16,11 +16,13 @@ Web UI / tail logs.
    ```sh
    powershell -File assets/dsh-tray.ps1
    ```
-   or just double-click the file. The DSH Web server starts headless (no
-   console window) and the tray icon appears. Right-click it to control the
-   server.
+   or just double-click `dsh-tray.vbs` (runs hidden, no console window) or
+   `dsh-tray.bat` at the repo root. The DSH Web server starts headless and the
+   tray icon appears. Right-click it to control the server.
 
 Requirements: Windows, and the `dsh` CLI on `PATH` (the tray calls `dsh web`).
+If `dsh` is not on `PATH`, edit `$startCommand` in `assets/dsh-tray.ps1` to the
+command that starts your server (see the examples in the CONFIG block).
 
 ## Menu
 
@@ -68,9 +70,12 @@ DeepSeek Harness Web 的 Windows 系统托盘启动器。无需安装:下载(或
    ```sh
    powershell -File assets/dsh-tray.ps1
    ```
-   或直接双击文件。DSH Web 服务以无窗口方式启动,托盘图标随即出现。右键图标即可控制服务。
+   或直接双击仓库根目录的 `dsh-tray.vbs`(隐藏运行,无黑框),也可双击 `dsh-tray.bat`。
+   DSH Web 服务以无窗口方式启动,托盘图标随即出现。右键图标即可控制服务。
 
 环境要求:Windows,且 `dsh` CLI 在 `PATH` 中(托盘会调用 `dsh web`)。
+若 `dsh` 不在 `PATH`,编辑 `assets/dsh-tray.ps1` 里的 `$startCommand` 改成你启动服务的命令
+(配置区内有示例)。
 
 ## 菜单
 

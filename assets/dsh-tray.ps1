@@ -21,8 +21,12 @@ Add-Type -AssemblyName System.Drawing
 
 # ===== CONFIG (edit here) =====
 $port = 3080
-# Command to start the DSH Web server when it is not running. Must be a
-# command resolvable on PATH that launches `dsh web`.
+# Command to start the DSH Web server when it is not running. The first
+# element is resolved via PATH (including .cmd/.ps1 via PATHEXT); the rest are
+# its arguments. Examples:
+#   @('dsh', 'web', '--port', $port)              # if `dsh` is on PATH
+#   @('pnpm', 'dsh', 'web', '--port', $port)      # from a project with dsh
+#   @('cmd', '/c', 'pnpm dsh web --port', $port)  # launched through cmd
 $startCommand = @('dsh', 'web', '--port', $port)
 # Log files for the server output (used by "Show Logs").
 $logOut = Join-Path $env:TEMP 'dsh-tray.out.log'
@@ -39,7 +43,14 @@ function Get-DshRunning {
 }
 
 function Start-Dsh {
-    Start-Process -FilePath $startCommand[0] -WindowStyle Hidden `
+    $exe = Get-Command $startCommand[0] -CommandType Application -ErrorAction SilentlyContinue
+    if (-not $exe) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Cannot find launcher '$($startCommand[0])' on PATH.`nEdit `$startCommand in dsh-tray.ps1.",
+            'DSH Tray') | Out-Null
+        return
+    }
+    Start-Process -FilePath $exe.Path -WindowStyle Hidden `
         -ArgumentList $startCommand[1..($startCommand.Count - 1)] `
         -RedirectStandardOutput $logOut -RedirectStandardError $logErr
 }
