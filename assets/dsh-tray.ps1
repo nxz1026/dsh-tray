@@ -85,6 +85,19 @@ function Restart-Dsh {
     Start-Dsh
 }
 
+# Open the Web UI in the default browser once the server is actually listening.
+# Runs the wait in a hidden background process so the tray message loop never
+# blocks while the server boots.
+function OpenUiWhenReady {
+    $cmd = "for (`$i=0; `$i -lt 45; `$i++) { `$c = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue; if (`$c) { Start-Process 'http://127.0.0.1:$port'; break }; Start-Sleep -Seconds 1 }"
+    Start-Process -FilePath 'powershell' -WindowStyle Hidden -ArgumentList @('-NoProfile', '-Command', $cmd)
+}
+
+function Start-Dsh-And-OpenUi {
+    Start-Dsh
+    OpenUiWhenReady
+}
+
 # --- Tray icon + context menu ---
 if (-not $NoTray) {
     $notify = New-Object System.Windows.Forms.NotifyIcon
@@ -104,8 +117,8 @@ if (-not $NoTray) {
 
     $start = $menu.Items.Add('Start Server')
     $start.Add_Click({
-            Start-Dsh
-            $notify.ShowBalloonTip(3000, 'DSH Web', "Starting... browser opens at http://127.0.0.1:$port", 'Info')
+            Start-Dsh-And-OpenUi
+            $notify.ShowBalloonTip(3000, 'DSH Web', "Starting... browser opens at http://127.0.0.1:$port when ready", 'Info')
         })
 
     $stop = $menu.Items.Add('Stop Server')
@@ -143,7 +156,7 @@ if (-not $NoTray) {
 
     # Auto-start the server on launch when not already running (skipped under -NoTray).
     if ($autoStart -and -not (Get-DshRunning)) {
-        Start-Dsh
+        Start-Dsh-And-OpenUi
     }
     $notify.ShowBalloonTip(3000, 'DSH Web', "DSH Web tray ready at http://127.0.0.1:$port`nRight-click the icon to control it.", 'Info')
 

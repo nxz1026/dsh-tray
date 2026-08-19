@@ -40,7 +40,8 @@ Requirements: Windows, and `node` on `PATH`.
 
 The script creates a `System.Windows.Forms` notify icon, polls the server port
 to keep the menu state accurate, and drives `dsh web` for start/stop/restart.
-"Show Logs" opens a Windows Terminal tab that tails the server log.
+"Show Logs" opens a Windows Terminal tab that tails the server log. Once the
+server is up, the default browser opens to the Web UI automatically.
 
 ## Plugin-ready (future)
 
@@ -98,7 +99,7 @@ DeepSeek Harness Web 的 Windows 系统托盘启动器。无需安装:下载(或
 
 脚本创建 `System.Windows.Forms` 通知图标,轮询服务端口以保持菜单状态准确,
 并通过 `dsh web` 实现启动 / 停止 / 重启。"查看日志"会打开一个 Windows Terminal
-标签页实时追踪服务日志。
+标签页实时追踪服务日志。服务就绪后,默认浏览器会自动打开 Web UI。
 
 ## 插件化(未来)
 
