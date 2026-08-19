@@ -16,9 +16,11 @@ Web UI / tail logs.
    ```sh
    powershell -File assets\dsh-tray.ps1
    ```
-   or double-click `dsh-tray.bat` at the repo root (it launches the script
-   hidden). The DSH Web server starts headless and the tray icon appears.
-   Right-click it to control the server.
+   or double-click `dsh-tray.vbs` at the repo root — it launches the script
+   through `wscript.exe`, so **no console window appears at all**. The DSH Web
+   server starts headless and the tray icon appears. Right-click it to control
+   the server. (`dsh-tray.bat` is kept as a fallback and also routes through the
+   VBS file.)
 
 Configuration: edit the `CONFIG` block at the top of `assets/dsh-tray.ps1`:
 - `$workDir` — your DeepSeek Harness repo root. The server is started from
@@ -76,8 +78,9 @@ DeepSeek Harness Web 的 Windows 系统托盘启动器。无需安装:下载(或
    ```sh
    powershell -File assets\dsh-tray.ps1
    ```
-   或直接双击仓库根目录的 `dsh-tray.bat`(以隐藏方式拉起脚本)。
-   DSH Web 服务以无窗口方式启动,托盘图标随即出现。右键图标即可控制服务。
+   或直接双击仓库根目录的 `dsh-tray.vbs`(通过 `wscript.exe` 拉起脚本,**完全不会
+   出现任何命令行窗口**)。DSH Web 服务以无窗口方式启动,托盘图标随即出现。
+   右键图标即可控制服务。(`dsh-tray.bat` 保留作后备,同样会路由到 VBS 文件。)
 
 配置:编辑 `assets/dsh-tray.ps1` 顶部的 `CONFIG` 配置区:
 - `$workDir` — 你的 DeepSeek Harness 仓库根目录。服务从这里启动,
