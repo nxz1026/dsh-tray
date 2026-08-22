@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate package.json manifest
+        shell: pwsh
+        run: |
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          if (-not $pkg.dsh.bundle.patch) { throw 'package.json: missing dsh.bundle.patch' }
+          if (-not (Test-Path $pkg.dsh.bundle.patch)) { throw "missing $($pkg.dsh.bundle.patch)" }
+          $patch = Get-Content $pkg.dsh.bundle.patch -Raw
+          if ($patch -notmatch '- insert:') { throw 'cordis.patch.yml: no insert block' }
+          Write-Host 'manifest OK'
+      - name: PowerShell syntax check
+        shell: pwsh
+        run: |
+          $tokens = $null; $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'assets/dsh-tray.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
+          Write-Host 'dsh-tray.ps1 syntax OK'
