@@ -45,12 +45,23 @@ to keep the menu state accurate, and drives `dsh web` for start/stop/restart.
 "Show Logs" opens a Windows Terminal tab that tails the server log. Once the
 server is up, the default browser opens to the Web UI automatically.
 
-## Plugin-ready (future)
+## Install as a dsh plugin
 
-This repo also carries Cordis plugin scaffolding — `package.json` with a
-`dsh.bundle` manifest, `cordis.patch.yml`, and `src/plugin.js` — so it can
-later be installed as a `dsh` plugin. That is not the current usage: for now
-you just run the script directly.
+The repo declares a `dsh.bundle` manifest, so it can also be installed directly
+into a dsh profile (Windows):
+
+```sh
+dsh plugin --profile web add https://github.com/nxz1026/dsh-tray
+```
+
+This registers the tray launcher as a profile bundle; the tray script itself is
+still started from the Start-menu shortcut, the `.vbs` file, or manually.
+
+## Plugin-ready
+
+This repo carries Cordis plugin scaffolding — `package.json` with a
+`dsh.bundle` manifest, `cordis.patch.yml`, and `src/plugin.js`. CI validates the
+manifest and PowerShell syntax on every push.
 
 ## Limitations
 
