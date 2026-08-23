@@ -12,6 +12,7 @@ Web UI / tail logs.
    - `$port` — server port (default `3080`).
    - `$startCommand` — the command that launches `dsh web` (must be on `PATH`).
    - `$autoStart` — start the server on launch if it is not already running.
+   - `$pollIntervalMs` — how often the tray re-checks the port (default `3000`).
 3. Run it:
    ```sh
    powershell -File assets\dsh-tray.ps1
@@ -27,7 +28,7 @@ Configuration: edit the `CONFIG` block at the top of `assets/dsh-tray.ps1`:
   here so `apps/cli/src/bin.ts` and `tsx` resolve correctly.
 - `$startCommand` — the command that starts the server (default launches the
   harness via `node --import tsx/esm apps/cli/src/bin.ts web`).
-- `$port`, `$autoStart`.
+- `$port`, `$autoStart`, `$pollIntervalMs`.
 
 Requirements: Windows, and `node` on `PATH`.
 
@@ -36,14 +37,20 @@ Requirements: Windows, and `node` on `PATH`.
 - **Open Web UI** — open http://127.0.0.1:3080 in the default browser.
 - **Show Logs (Windows Terminal)** — tail the server log in a Windows Terminal tab.
 - **Start / Stop / Restart Server** — mutually exclusive with the running state.
+- **Launch at login** — checkbox; registers/removes a per-user Run-key entry.
 - **Exit (stop server)** — stop the server and remove the tray icon.
+
+The tray icon is green while the server runs and red when stopped.
 
 ## How it works
 
-The script creates a `System.Windows.Forms` notify icon, polls the server port
-to keep the menu state accurate, and drives `dsh web` for start/stop/restart.
-"Show Logs" opens a Windows Terminal tab that tails the server log. Once the
-server is up, the default browser opens to the Web UI automatically.
+The script creates a `System.Windows.Forms` notify icon and polls the server
+port on a timer to keep the icon color, tooltip, and menu state accurate. If
+the server exits unexpectedly you get a balloon warning; if it starts running
+on its own (e.g. launched from another terminal) the tray picks that up too.
+Stop/Restart target only the process tree this tray started — if some other
+program holds the port, the tray asks before touching it. "Show Logs" opens a
+Windows Terminal tab that tails the server log.
 
 ## Install as a dsh plugin
 
@@ -67,7 +74,7 @@ manifest and PowerShell syntax on every push.
 
 - Windows only.
 - Assumes the default port 3080 and the default web profile.
-- "Restart" stops the server on the port; bring it back up yourself.
+- "Launch at login" stores absolute paths; re-toggle it after moving the repo.
 - Independent tool, not an official DeepSeek product.
 
 ---
@@ -85,6 +92,7 @@ DeepSeek Harness Web 的 Windows 系统托盘启动器。无需安装:下载(或
    - `$port` — 服务端口(默认 `3080`)。
    - `$startCommand` — 启动 `dsh web` 的命令(需在 `PATH` 中)。
    - `$autoStart` — 若服务未运行,启动时自动拉起。
+   - `$pollIntervalMs` — 托盘轮询服务端口的间隔(默认 `3000`)。
 3. 运行:
    ```sh
    powershell -File assets\dsh-tray.ps1
@@ -98,7 +106,7 @@ DeepSeek Harness Web 的 Windows 系统托盘启动器。无需安装:下载(或
   这样 `apps/cli/src/bin.ts` 与 `tsx` 才能正确解析。
 - `$startCommand` — 启动服务的命令(默认用
   `node --import tsx/esm apps/cli/src/bin.ts web` 拉起 harness)。
-- `$port`、`$autoStart`。
+- `$port`、`$autoStart`、`$pollIntervalMs`。
 
 环境要求:Windows,且 `node` 在 `PATH` 中。
 
@@ -107,13 +115,18 @@ DeepSeek Harness Web 的 Windows 系统托盘启动器。无需安装:下载(或
 - **打开 Web UI** — 在默认浏览器中打开 http://127.0.0.1:3080。
 - **查看日志 (Windows Terminal)** — 在 Windows Terminal 标签页中实时追踪服务日志。
 - **启动 / 停止 / 重启服务** — 与运行状态互斥。
+- **开机自启 (Launch at login)** — 复选项;读写当前用户的 Run 注册表项,无需管理员权限。
 - **退出(停止服务)** — 停止服务并移除托盘图标。
+
+服务运行时托盘图标为绿色,停止时为红色。
 
 ## 工作原理
 
-脚本创建 `System.Windows.Forms` 通知图标,轮询服务端口以保持菜单状态准确,
-并通过 `dsh web` 实现启动 / 停止 / 重启。"查看日志"会打开一个 Windows Terminal
-标签页实时追踪服务日志。服务就绪后,默认浏览器会自动打开 Web UI。
+脚本创建 `System.Windows.Forms` 通知图标,并通过定时器轮询服务端口,实时刷新
+图标颜色、悬浮提示与菜单状态。服务意外退出时会弹出气泡警告;若服务在托盘之外
+被自行拉起(例如从别的终端启动),托盘也能感知到。停止/重启只作用于本托盘启动
+的进程树——若端口被其他程序占用,托盘会先询问再处理。"查看日志"会打开一个
+Windows Terminal 标签页实时追踪服务日志。
 
 ## 插件化(未来)
 
@@ -125,5 +138,5 @@ DeepSeek Harness Web 的 Windows 系统托盘启动器。无需安装:下载(或
 
 - 仅支持 Windows。
 - 使用默认端口 3080 与默认 web profile。
-- "重启"会停止端口上的服务,需自行重新拉起。
+- "开机自启"记录的是绝对路径;移动仓库位置后需重新勾选一次。
 - 独立工具,非 DeepSeek 官方产品。

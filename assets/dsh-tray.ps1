@@ -1,7 +1,7 @@
 # DSH Web system-tray launcher (standalone, download-and-run).
 # Keeps the server running HEADLESS (no console window) and uses the tray
-# icon as the control surface: start / stop / restart / open UI / show logs.
-# "Show Logs" opens a Windows Terminal tab that tails the server log.
+# icon as the control surface: start / stop / restart / open UI / show logs,
+# plus a launch-at-login toggle.
 #
 # Usage: edit the CONFIG block below, then run:
 #   powershell -File dsh-tray.ps1
@@ -37,13 +37,27 @@ $logOut = Join-Path $env:TEMP 'dsh-tray.out.log'
 $logErr = Join-Path $env:TEMP 'dsh-tray.err.log'
 # Start the server automatically on launch if it is not already running.
 $autoStart = $true
+# How often (ms) the tray re-checks the server port to refresh icon/menu state.
+$pollIntervalMs = 3000
 # ============================
 
 $wt = Get-Command wt.exe -ErrorAction SilentlyContinue
 
-function Get-DshRunning {
+$runKeyPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+$runValueName = 'DSH Tray'
+
+# --- Script-scope runtime state ---
+$script:trackedPid = 0          # root PID of the server THIS tray instance started
+$script:lastRunning = $null     # last known running state (for transitions)
+$script:suppressUntil = [datetime]::MinValue  # skip crash/exit balloons until here
+
+function Get-PortOwnerPids {
     $c = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-    ($c.OwningProcess | Where-Object { $_ -ne 0 } | Measure-Object).Count -gt 0
+    @($c.OwningProcess | Where-Object { $_ -ne 0 } | Sort-Object -Unique)
+}
+
+function Get-DshRunning {
+    (Get-PortOwnerPids).Count -gt 0
 }
 
 function Start-Dsh {
@@ -54,16 +68,48 @@ function Start-Dsh {
             'DSH Tray') | Out-Null
         return
     }
-    Start-Process -FilePath $exe.Path -WindowStyle Hidden `
+    $proc = Start-Process -FilePath $exe.Path -WindowStyle Hidden `
         -WorkingDirectory $workDir `
         -ArgumentList $startCommand[1..($startCommand.Count - 1)] `
-        -RedirectStandardOutput $logOut -RedirectStandardError $logErr
+        -RedirectStandardOutput $logOut -RedirectStandardError $logErr -PassThru
+    if ($proc) { $script:trackedPid = $proc.Id }
+}
+
+function Stop-ProcessTree([int]$processId) {
+    # taskkill /T kills the whole tree; hidden window avoids a console flash.
+    try {
+        Start-Process -FilePath 'taskkill.exe' -WindowStyle Hidden -Wait `
+            -ArgumentList @('/PID', "$processId", '/T', '/F')
+    } catch { }
 }
 
 function Stop-Dsh {
-    $c = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-    $c.OwningProcess | Where-Object { $_ -ne 0 } | Sort-Object -Unique | ForEach-Object {
-        Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue
+    param([switch]$Quiet)
+
+    # A user-initiated stop/restart must not trigger the crash balloon.
+    $script:suppressUntil = (Get-Date).AddSeconds(15)
+
+    # Prefer the exact tree this tray started; never blindly kill strangers.
+    if ($script:trackedPid -and (Get-Process -Id $script:trackedPid -ErrorAction SilentlyContinue)) {
+        Stop-ProcessTree $script:trackedPid
+        $script:trackedPid = 0
+        return
+    }
+    $script:trackedPid = 0
+
+    $ownerPids = Get-PortOwnerPids
+    if (-not $ownerPids.Count) { return }
+    if ($Quiet) { return }   # exiting the tray leaves unknown servers untouched
+
+    $names = ($ownerPids | ForEach-Object {
+            $p = Get-Process -Id $_ -ErrorAction SilentlyContinue
+            if ($p) { '{0} (PID {1})' -f $p.ProcessName, $p.Id } else { "PID $_" }
+        }) -join ', '
+    $answer = [System.Windows.Forms.MessageBox]::Show(
+        "Port $port is held by $names, which was NOT started by DSH Tray.`n`nForce-stop it anyway?",
+        'DSH Tray', 'YesNo', 'Warning')
+    if ($answer -eq 'Yes') {
+        foreach ($opid in $ownerPids) { Stop-ProcessTree $opid }
     }
 }
 
@@ -85,23 +131,53 @@ function Restart-Dsh {
     Start-Dsh
 }
 
-# Open the Web UI in the default browser once the server is actually listening.
-# Runs the wait in a hidden background process so the tray message loop never
-# blocks while the server boots.
-function OpenUiWhenReady {
-    $cmd = "for (`$i=0; `$i -lt 45; `$i++) { `$c = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue; if (`$c) { Start-Process 'http://127.0.0.1:$port'; break }; Start-Sleep -Seconds 1 }"
-    Start-Process -FilePath 'powershell' -WindowStyle Hidden -ArgumentList @('-NoProfile', '-Command', $cmd)
+# --- Launch-at-login toggle (HKCU Run key, per-user, no admin needed) ---
+function Get-LaunchCommand {
+    # Prefer the VBS wrapper (zero console flash); fall back to hidden PowerShell.
+    $vbs = Join-Path (Split-Path -Parent $PSScriptRoot) 'dsh-tray.vbs'
+    if (Test-Path -LiteralPath $vbs) {
+        return "wscript.exe `"$vbs`""
+    }
+    return "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSCommandPath`""
 }
 
-function Start-Dsh-And-OpenUi {
-    Start-Dsh
-    OpenUiWhenReady
+function Get-LaunchAtLogin {
+    $item = Get-ItemProperty -LiteralPath $runKeyPath -Name $runValueName -ErrorAction SilentlyContinue
+    return ($null -ne $item)
+}
+
+function Set-LaunchAtLogin {
+    param([bool]$Enabled)
+    if ($Enabled) {
+        Set-ItemProperty -LiteralPath $runKeyPath -Name $runValueName -Value (Get-LaunchCommand)
+    } else {
+        Remove-ItemProperty -LiteralPath $runKeyPath -Name $runValueName -ErrorAction SilentlyContinue
+    }
+}
+
+# --- Status icons (green = running, red = stopped) ---
+function New-StateIcon {
+    param([System.Drawing.Color]$Color)
+    $bmp = New-Object System.Drawing.Bitmap 16, 16
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $brush = New-Object System.Drawing.SolidBrush($Color)
+    $g.FillEllipse($brush, 2, 2, 12, 12)
+    $g.DrawEllipse([System.Drawing.Pens]::DimGray, 2, 2, 12, 12)
+    $g.Dispose()
+    $brush.Dispose()
+    $icon = [System.Drawing.Icon]::FromHandle($bmp.GetHicon())
+    $bmp.Dispose()
+    return $icon
 }
 
 # --- Tray icon + context menu ---
 if (-not $NoTray) {
+    $iconRunning = New-StateIcon ([System.Drawing.Color]::ForestGreen)
+    $iconStopped = New-StateIcon ([System.Drawing.Color]::Firebrick)
+
     $notify = New-Object System.Windows.Forms.NotifyIcon
-    $notify.Icon = [System.Drawing.SystemIcons]::Application
+    $notify.Icon = $iconStopped
     $notify.Text = 'DSH Web'
     $notify.Visible = $true
 
@@ -117,8 +193,8 @@ if (-not $NoTray) {
 
     $start = $menu.Items.Add('Start Server')
     $start.Add_Click({
-            Start-Dsh-And-OpenUi
-            $notify.ShowBalloonTip(3000, 'DSH Web', "Starting... browser opens at http://127.0.0.1:$port when ready", 'Info')
+            Start-Dsh
+            $notify.ShowBalloonTip(3000, 'DSH Web', "Starting server on http://127.0.0.1:$port ...", 'Info')
         })
 
     $stop = $menu.Items.Add('Stop Server')
@@ -135,29 +211,68 @@ if (-not $NoTray) {
 
     $menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator)) | Out-Null
 
+    $launchAtLogin = $menu.Items.Add('Launch at login')
+    $launchAtLogin.CheckOnClick = $true
+    $launchAtLogin.Checked = Get-LaunchAtLogin
+    $launchAtLogin.Add_Click({
+            Set-LaunchAtLogin $launchAtLogin.Checked
+            if ($launchAtLogin.Checked) {
+                $notify.ShowBalloonTip(3000, 'DSH Tray', 'DSH Tray will start at login.', 'Info')
+            } else {
+                $notify.ShowBalloonTip(3000, 'DSH Tray', 'DSH Tray will NOT start at login.', 'Info')
+            }
+        })
+
+    $menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator)) | Out-Null
+
     $exit = $menu.Items.Add('Exit (stop server)')
     $exit.Add_Click({
-            Stop-Dsh
+            Stop-Dsh -Quiet
             $notify.Visible = $false
             [System.Windows.Forms.Application]::Exit()
         })
 
     function Update-MenuState {
         $running = Get-DshRunning
+
+        if ($null -ne $script:lastRunning) {
+            if ($script:lastRunning -and -not $running) {
+                $script:trackedPid = 0
+                if ((Get-Date) -gt $script:suppressUntil) {
+                    $notify.ShowBalloonTip(5000, 'DSH Web',
+                        "Server exited unexpectedly (port $port is free).", 'Warning')
+                }
+            } elseif (-not $script:lastRunning -and $running -and -not $script:trackedPid) {
+                if ((Get-Date) -gt $script:suppressUntil) {
+                    $notify.ShowBalloonTip(5000, 'DSH Web',
+                        "Server detected running at http://127.0.0.1:$port", 'Info')
+                }
+            }
+        }
+        $script:lastRunning = $running
+
         $start.Enabled = -not $running
         $stop.Enabled = $running
         $restart.Enabled = $running
+        $notify.Icon = if ($running) { $iconRunning } else { $iconStopped }
         $notify.Text = if ($running) { "DSH Web - running (:${port})" } else { "DSH Web - stopped (:${port})" }
     }
     $menu.Add_Opening({ Update-MenuState })
+
+    $pollTimer = New-Object System.Windows.Forms.Timer
+    $pollTimer.Interval = $pollIntervalMs
+    $pollTimer.Add_Tick({ Update-MenuState })
 
     $notify.ContextMenuStrip = $menu
     $notify.Add_DoubleClick({ Start-Process "http://127.0.0.1:$port" })
 
     # Auto-start the server on launch when not already running (skipped under -NoTray).
     if ($autoStart -and -not (Get-DshRunning)) {
-        Start-Dsh-And-OpenUi
+        Start-Dsh
     }
+    Update-MenuState
+    $pollTimer.Start()
+
     $notify.ShowBalloonTip(3000, 'DSH Web', "DSH Web tray ready at http://127.0.0.1:$port`nRight-click the icon to control it.", 'Info')
 
     $hiddenForm = New-Object System.Windows.Forms.Form
