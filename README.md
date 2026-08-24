@@ -1,3 +1,4 @@
+[![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 # DSH Tray
 
 A Windows system-tray launcher for DeepSeek Harness Web. No install step:
