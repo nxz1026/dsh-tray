@@ -75,13 +75,10 @@ function Get-PortOwnerPids {
 
 function Get-DshRunning {
     if (-not (Get-PortOwnerPids).Count) { return $false }
-    # In remote mode the listening port is just the ssh tunnel; verify the server
-    # actually answers so the icon does not go green when only the tunnel is up.
+    # In remote mode the listening port is just the ssh tunnel; confirm it
+    # forwards to a server that is actually listening on the cloud host.
     if ($mode -eq 'remote') {
-        try {
-            $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port" -TimeoutSec 2 -UseBasicParsing -ErrorAction SilentlyContinue
-            return ($null -ne $r)
-        } catch { return $false }
+        return (Test-NetConnection -ComputerName 127.0.0.1 -Port $port -InformationLevel Quiet -ErrorAction SilentlyContinue)
     }
     return $true
 }
@@ -120,14 +117,24 @@ function Start-RemoteDsh {
             'DSH Tray') | Out-Null
         return
     }
-    # Start the server on the cloud host in the background, then keep this ssh
-    # process alive as the local tunnel (-f backgrounds after the remote command).
-    # The remote non-login shell often has an empty PATH, so prepend the standard
-    # dirs (where dsh lives, e.g. /usr/local/bin) before the user's command.
+    # Clear any stale local tunnel on $port so a lingering ssh does not make the
+    # new one bail on ExitOnForwardFailure (a killed tray can leave one behind).
+    foreach ($p in Get-PortOwnerPids) {
+        $proc = Get-Process -Id $p -ErrorAction SilentlyContinue
+        if ($proc -and $proc.Name -eq 'ssh') { Stop-ProcessTree $p }
+    }
+    # 1) Start the server on the cloud host. No tunnel is needed for this call;
+    #    the remote non-login shell often has an empty PATH, so prepend the
+    #    standard dirs (where dsh lives, e.g. /usr/local/bin) first.
     $remoteCmd = "export PATH=/usr/local/bin:/usr/bin:/bin:`$PATH; nohup $remoteStartCommand >/tmp/dsh-tray.out.log 2>&1 &"
-    $args = @('-f', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ExitOnForwardFailure=yes',
-              '-E', "$logErr", '-i', "$sshKey", '-L', ('{0}:127.0.0.1:{0}' -f $port), $sshHost, $remoteCmd)
-    $proc = Start-Process -FilePath $ssh.Path -WindowStyle Hidden -ArgumentList $args -PassThru
+    $startArgs = @('-o', 'StrictHostKeyChecking=accept-new', '-o', 'ExitOnForwardFailure=yes',
+                    '-E', "$logErr", '-i', "$sshKey", $sshHost, $remoteCmd)
+    Start-Process -FilePath $ssh.Path -WindowStyle Hidden -ArgumentList $startArgs | Out-Null
+    # 2) Open the local tunnel as a separate, persistent ssh (-f -N -L). Splitting
+    #    it out avoids the unreliable -f-with-remote-command forwarding on Windows.
+    $tunnelArgs = @('-f', '-N', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ExitOnForwardFailure=yes',
+                    '-i', "$sshKey", '-L', ('{0}:127.0.0.1:{0}' -f $port), $sshHost)
+    $proc = Start-Process -FilePath $ssh.Path -WindowStyle Hidden -ArgumentList $tunnelArgs -PassThru
     if ($proc) { $script:trackedPid = $proc.Id }
 }
 
