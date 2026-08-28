@@ -70,7 +70,9 @@ starts with an empty PATH. If your `dsh` lives elsewhere, set
 host and shown by "Show Logs" (it tails `/tmp/dsh-tray.out.log` over SSH).
 "Start" launches the server on the cloud host over SSH, then opens a separate
 persistent local tunnel (`ssh -f -N -L $port:127.0.0.1:$port <host>`), so the Web
-UI is reachable at `http://127.0.0.1:$port` exactly like local mode. The tray's port poll, status icon, and Open Web UI all keep working because
+UI is reachable at `http://127.0.0.1:$port` exactly like local mode. In remote
+mode the tray also opens the Web UI in your default browser automatically once
+the server is reachable (in local mode `dsh web` opens it itself, so it does not). The tray's port poll, status icon, and Open Web UI all keep working because
 the tunnel terminates on the local port. "Stop" kills the tunnel and, when
 `$stopRemoteServer` is `$true`, also `ssh`es in to `pkill` the server. Windows 10+
 ships OpenSSH (`ssh.exe`) — no extra install needed.
@@ -166,8 +168,10 @@ SSH 会话 PATH 为空也能找到 `dsh`（通常在 `/usr/local/bin/dsh`）。�
 由「查看日志」通过 SSH 拉取 `/tmp/dsh-tray.out.log` 显示。
 点「启动」会先在云端主机用 SSH 拉起服务，再单独开一条常驻本地隧道
 （`ssh -f -N -L $port:127.0.0.1:$port <host>`），于是 Web UI 通过
-`http://127.0.0.1:$port` 访问，与本地模式完全一致。托盘的端口轮询、状态图标、
-「打开 Web UI」全部照常生效（隧道终结在本地端口）。点「停止」会杀掉隧道，
+`http://127.0.0.1:$port` 访问，与本地模式完全一致。remote 模式下，服务一旦可达，
+托盘会自动在本地默认浏览器打开 Web UI（本地模式由 `dsh web` 自己打开，故不重复）。
+托盘的端口轮询、状态图标、「打开 Web UI」全部照常生效（隧道终结在本地端口）。
+点「停止」会杀掉隧道，
 若 `$stopRemoteServer` 为 `$true`，还会 `ssh` 进去 `pkill` 掉云端服务。Windows 10+
 自带 OpenSSH（`ssh.exe`），无需额外安装。
 

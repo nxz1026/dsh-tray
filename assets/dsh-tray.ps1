@@ -67,6 +67,7 @@ $runValueName = 'DSH Tray'
 $script:trackedPid = 0          # root PID of the server THIS tray instance started
 $script:lastRunning = $null     # last known running state (for transitions)
 $script:suppressUntil = [datetime]::MinValue  # skip crash/exit balloons until here
+$script:openWhenUp = $false     # open the Web UI locally once the server is up
 
 function Get-PortOwnerPids {
     $c = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
@@ -84,6 +85,7 @@ function Get-DshRunning {
 }
 
 function Start-Dsh {
+    $script:openWhenUp = $true
     if ($mode -eq 'remote') { Start-RemoteDsh; return }
     Start-LocalDsh
 }
@@ -148,6 +150,7 @@ function Stop-ProcessTree([int]$processId) {
 
 function Stop-Dsh {
     param([switch]$Quiet)
+    $script:openWhenUp = $false
     if ($mode -eq 'remote') { Stop-RemoteDsh $Quiet; return }
     Stop-LocalDsh $Quiet
 }
@@ -352,8 +355,16 @@ if (-not $NoTray) {
                     $notify.ShowBalloonTip(5000, 'DSH Web',
                         "Server exited unexpectedly (port $port is free).", 'Warning')
                 }
-            } elseif (-not $script:lastRunning -and $running -and -not $script:trackedPid) {
-                if ((Get-Date) -gt $script:suppressUntil) {
+            } elseif (-not $script:lastRunning -and $running) {
+                if ($script:openWhenUp) {
+                    # We initiated this start: open the Web UI locally once up.
+                    $script:openWhenUp = $false
+                    if ($mode -eq 'remote') {
+                        Start-Process "http://127.0.0.1:$port"
+                        $notify.ShowBalloonTip(3000, 'DSH Web',
+                            "Opening Web UI at http://127.0.0.1:$port", 'Info')
+                    }
+                } elseif ((Get-Date) -gt $script:suppressUntil) {
                     $notify.ShowBalloonTip(5000, 'DSH Web',
                         "Server detected running at http://127.0.0.1:$port", 'Info')
                 }
