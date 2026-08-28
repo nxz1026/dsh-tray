@@ -76,10 +76,27 @@ function Get-PortOwnerPids {
 
 function Get-DshRunning {
     if (-not (Get-PortOwnerPids).Count) { return $false }
-    # In remote mode the listening port is just the ssh tunnel; confirm it
-    # forwards to a server that is actually listening on the cloud host.
+    # In remote mode the local port is only the ssh tunnel. A TCP connect to it
+    # always succeeds (ssh accepts locally) even when the cloud server is down, so
+    # probe the server itself: it is "ready" only once dsh web actually serves
+    # HTTP. This keeps the icon/browser from going live while the server warms up
+    # (which otherwise leaves the browser spinning forever).
     if ($mode -eq 'remote') {
-        return (Test-NetConnection -ComputerName 127.0.0.1 -Port $port -InformationLevel Quiet -ErrorAction SilentlyContinue)
+        try {
+            $req = [System.Net.HttpWebRequest]::Create("http://127.0.0.1:$port/")
+            $req.Timeout = 1500
+            $req.Method = 'GET'
+            $resp = $req.GetResponse()
+            $resp.Close()
+            return $true
+        } catch [System.Net.WebException] {
+            # A response (even non-2xx) means the server answered => it is up.
+            # Only a connection failure (tunnel forwards to nothing) means not ready.
+            if ($_.Exception.Response -ne $null) { return $true }
+            return $false
+        } catch {
+            return $false
+        }
     }
     return $true
 }
@@ -125,16 +142,17 @@ function Start-RemoteDsh {
         $proc = Get-Process -Id $p -ErrorAction SilentlyContinue
         if ($proc -and $proc.Name -eq 'ssh') { Stop-ProcessTree $p }
     }
-    # 1) Start the server on the cloud host. No tunnel is needed for this call;
-    #    the remote non-login shell often has an empty PATH, so prepend the
-    #    standard dirs (where dsh lives, e.g. /usr/local/bin) first.
+    # 1) Start the server on the cloud host. The remote non-login shell often has
+    #    an empty PATH, so prepend the standard dirs (where dsh lives) first.
     $remoteCmd = "export PATH=/usr/local/bin:/usr/bin:/bin:`$PATH; nohup $remoteStartCommand >/tmp/dsh-tray.out.log 2>&1 &"
-    $startArgs = @('-o', 'StrictHostKeyChecking=accept-new', '-o', 'ExitOnForwardFailure=yes',
-                    '-E', "$logErr", '-i', "$sshKey", $sshHost, $remoteCmd)
+    $startArgs = @('-o', 'StrictHostKeyChecking=accept-new', '-E', "$logErr", '-i', "$sshKey", $sshHost, $remoteCmd)
     Start-Process -FilePath $ssh.Path -WindowStyle Hidden -ArgumentList $startArgs | Out-Null
-    # 2) Open the local tunnel as a separate, persistent ssh (-f -N -L). Splitting
-    #    it out avoids the unreliable -f-with-remote-command forwarding on Windows.
-    $tunnelArgs = @('-f', '-N', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ExitOnForwardFailure=yes',
+    # 2) Open the persistent local tunnel immediately. It is only a pipe; the tray
+    #    reports "ready" (and auto-opens the Web UI) only once the cloud server is
+    #    actually serving HTTP, so the browser never opens against a not-yet-ready
+    #    server and spin. Splitting the tunnel into its own ssh (-f -N -L) avoids
+    #    the unreliable -f-with-remote-command forwarding on Windows.
+    $tunnelArgs = @('-f', '-N', '-o', 'StrictHostKeyChecking=accept-new',
                     '-i', "$sshKey", '-L', ('{0}:127.0.0.1:{0}' -f $port), $sshHost)
     $proc = Start-Process -FilePath $ssh.Path -WindowStyle Hidden -ArgumentList $tunnelArgs -PassThru
     if ($proc) { $script:trackedPid = $proc.Id }
@@ -213,7 +231,7 @@ function ShowLogs {
     if ($mode -eq 'remote') {
         # Tail the server log on the cloud host (written by the remote command).
         $rk = @('-o', 'StrictHostKeyChecking=accept-new', '-i', "$sshKey", $sshHost,
-                "tail -n 50 /tmp/dsh-tray.out.log")
+                "tail -n 50 -f /tmp/dsh-tray.out.log")
         $cmd = 'ssh ' + ($rk -join ' ')
         if ($wt) {
             Start-Process -FilePath $wt.Path -ArgumentList @('powershell', '-NoProfile', '-Command', $cmd)
@@ -303,7 +321,7 @@ if (-not $NoTray) {
     $start.Add_Click({
             Start-Dsh
             $msg = if ($mode -eq 'remote') {
-                "Starting cloud server + tunnel for http://127.0.0.1:$port ..."
+                "Starting cloud server + tunnel; opening the Web UI once it is ready..."
             } else {
                 "Starting server on http://127.0.0.1:$port ..."
             }
@@ -385,7 +403,7 @@ if (-not $NoTray) {
     $pollTimer.Add_Tick({ Update-MenuState })
 
     $notify.ContextMenuStrip = $menu
-    $notify.Add_DoubleClick({ Start-Process "http://127.0.0.1:$port" })
+    $notify.Add_DoubleClick({ if (Get-DshRunning) { Start-Process "http://127.0.0.1:$port" } })
 
     # Auto-start the server on launch when not already running (skipped under -NoTray).
     if ($autoStart -and -not (Get-DshRunning)) {
