@@ -29,7 +29,11 @@ Configuration: edit the `CONFIG` block at the top of `assets/dsh-tray.ps1`:
   here so `apps/cli/src/bin.ts` and `tsx` resolve correctly.
 - `$startCommand` — the command that starts the server (default launches the
   harness via `node --import tsx/esm apps/cli/src/bin.ts web`).
-- `$port`, `$autoStart`, `$pollIntervalMs`.
+   - `$port`, `$autoStart`, `$pollIntervalMs`.
+   - `$mode` — `local` (default) runs the server on this machine, or `remote`
+     to launch it on a cloud host over SSH and tunnel it to `127.0.0.1:$port`.
+   - `$sshHost`, `$sshKey`, `$remoteStartCommand`, `$stopRemoteServer` — only
+     used in `remote` mode.
 
 Requirements: Windows, and `node` on `PATH`.
 
@@ -52,6 +56,17 @@ on its own (e.g. launched from another terminal) the tray picks that up too.
 Stop/Restart target only the process tree this tray started — if some other
 program holds the port, the tray asks before touching it. "Show Logs" opens a
 Windows Terminal tab that tails the server log.
+
+### Remote mode (cloud host over SSH)
+
+Set `$mode = 'remote'` and fill in `$sshHost`, `$sshKey`, `$remoteStartCommand`.
+"Start" then runs `ssh -f -L $port:127.0.0.1:$port <host> "nohup <remoteStartCommand> &"`
+— one command that boots the server on the cloud **and** keeps a local tunnel
+alive, so the Web UI is reachable at `http://127.0.0.1:$port` exactly like local
+mode. The tray's port poll, status icon, and Open Web UI all keep working because
+the tunnel terminates on the local port. "Stop" kills the tunnel and, when
+`$stopRemoteServer` is `$true`, also `ssh`es in to `pkill` the server. Windows 10+
+ships OpenSSH (`ssh.exe`) — no extra install needed.
 
 ## Install as a dsh plugin
 
@@ -108,6 +123,9 @@ DeepSeek Harness Web 的 Windows 系统托盘启动器。无需安装:下载(或
 - `$startCommand` — 启动服务的命令(默认用
   `node --import tsx/esm apps/cli/src/bin.ts web` 拉起 harness)。
 - `$port`、`$autoStart`、`$pollIntervalMs`。
+- `$mode` — `local`（默认）在本机启动服务；设为 `remote` 则通过 SSH 在云端主机
+  启动服务并把端口隧道到 `127.0.0.1:$port`。
+- `$sshHost`、`$sshKey`、`$remoteStartCommand`、`$stopRemoteServer` — 仅 remote 模式使用。
 
 环境要求:Windows,且 `node` 在 `PATH` 中。
 
@@ -128,6 +146,16 @@ DeepSeek Harness Web 的 Windows 系统托盘启动器。无需安装:下载(或
 被自行拉起(例如从别的终端启动),托盘也能感知到。停止/重启只作用于本托盘启动
 的进程树——若端口被其他程序占用,托盘会先询问再处理。"查看日志"会打开一个
 Windows Terminal 标签页实时追踪服务日志。
+
+### 远程模式（云端主机 + SSH）
+
+将 `$mode` 设为 `remote` 并填好 `$sshHost`、`$sshKey`、`$remoteStartCommand`。
+点「启动」会执行 `ssh -f -L $port:127.0.0.1:$port <host> "nohup <remoteStartCommand> &"`——
+这一条命令既在云端拉起服务，又保持本地隧道常驻，于是 Web UI 通过
+`http://127.0.0.1:$port` 访问，与本地模式完全一致。托盘的端口轮询、状态图标、
+「打开 Web UI」全部照常生效（隧道终结在本地端口）。点「停止」会杀掉隧道，
+若 `$stopRemoteServer` 为 `$true`，还会 `ssh` 进去 `pkill` 掉云端服务。Windows 10+
+自带 OpenSSH（`ssh.exe`），无需额外安装。
 
 ## 插件化(未来)
 

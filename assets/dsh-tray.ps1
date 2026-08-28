@@ -39,6 +39,16 @@ $logErr = Join-Path $env:TEMP 'dsh-tray.err.log'
 $autoStart = $true
 # How often (ms) the tray re-checks the server port to refresh icon/menu state.
 $pollIntervalMs = 3000
+# Backend mode: 'local' runs the server on this machine; 'remote' launches it on a
+# cloud host over SSH and opens a local tunnel so the Web UI is at 127.0.0.1:$port.
+$mode = 'local'
+# --- remote mode config (only used when $mode = 'remote') ---
+$sshHost = 'ubuntu@ec2-16-16-138-7.eu-north-1.compute.amazonaws.com'  # user@host
+$sshKey  = Join-Path $env:USERPROFILE '.ssh\DSH.pem'                   # identity file
+# Remote command that starts the server (must bind 127.0.0.1 so the tunnel reaches it).
+$remoteStartCommand = 'dsh web --port ' + $port
+# Also kill the server on the cloud host when stopping (otherwise it keeps running).
+$stopRemoteServer = $true
 # ============================
 
 $wt = Get-Command wt.exe -ErrorAction SilentlyContinue
@@ -61,6 +71,11 @@ function Get-DshRunning {
 }
 
 function Start-Dsh {
+    if ($mode -eq 'remote') { Start-RemoteDsh; return }
+    Start-LocalDsh
+}
+
+function Start-LocalDsh {
     $exe = Get-Command $startCommand[0] -CommandType Application -ErrorAction SilentlyContinue
     if (-not $exe) {
         [System.Windows.Forms.MessageBox]::Show(
@@ -75,6 +90,29 @@ function Start-Dsh {
     if ($proc) { $script:trackedPid = $proc.Id }
 }
 
+function Start-RemoteDsh {
+    $ssh = Get-Command ssh.exe -ErrorAction SilentlyContinue
+    if (-not $ssh) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Cannot find ssh.exe on PATH.`nWindows 10+ ships OpenSSH; enable it or add it to PATH.",
+            'DSH Tray') | Out-Null
+        return
+    }
+    if (-not (Test-Path -LiteralPath $sshKey)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Cannot find SSH key at '$sshKey'.`nEdit `$sshKey in dsh-tray.ps1.",
+            'DSH Tray') | Out-Null
+        return
+    }
+    # Start the server on the cloud host in the background, then keep this ssh
+    # process alive as the local tunnel (-f backgrounds after the remote command).
+    $remoteCmd = "nohup $remoteStartCommand >/tmp/dsh-tray.out.log 2>&1 &"
+    $args = @('-f', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ExitOnForwardFailure=yes',
+              '-i', "$sshKey", '-L', ('{0}:127.0.0.1:{0}' -f $port), $sshHost, $remoteCmd)
+    $proc = Start-Process -FilePath $ssh.Path -WindowStyle Hidden -ArgumentList $args -PassThru
+    if ($proc) { $script:trackedPid = $proc.Id }
+}
+
 function Stop-ProcessTree([int]$processId) {
     # taskkill /T kills the whole tree; hidden window avoids a console flash.
     try {
@@ -84,6 +122,12 @@ function Stop-ProcessTree([int]$processId) {
 }
 
 function Stop-Dsh {
+    param([switch]$Quiet)
+    if ($mode -eq 'remote') { Stop-RemoteDsh $Quiet; return }
+    Stop-LocalDsh $Quiet
+}
+
+function Stop-LocalDsh {
     param([switch]$Quiet)
 
     # A user-initiated stop/restart must not trigger the crash balloon.
@@ -111,6 +155,30 @@ function Stop-Dsh {
     if ($answer -eq 'Yes') {
         foreach ($opid in $ownerPids) { Stop-ProcessTree $opid }
     }
+}
+
+function Stop-RemoteDsh {
+    param([switch]$Quiet)
+
+    # A user-initiated stop/restart must not trigger the crash balloon.
+    $script:suppressUntil = (Get-Date).AddSeconds(15)
+
+    # 1) Kill the local tunnel (the ssh.exe that owns local port $port).
+    foreach ($p in Get-PortOwnerPids) {
+        $proc = Get-Process -Id $p -ErrorAction SilentlyContinue
+        if ($proc -and $proc.Name -eq 'ssh') { Stop-ProcessTree $p }
+    }
+    # 2) Optionally kill the server on the cloud host too.
+    if ($stopRemoteServer) {
+        $ssh = Get-Command ssh.exe -ErrorAction SilentlyContinue
+        if ($ssh -and (Test-Path -LiteralPath $sshKey)) {
+            $pattern = (($remoteStartCommand -split ' ')[0..1] -join ' ')
+            $kargs = @('-o', 'StrictHostKeyChecking=accept-new', '-i', "$sshKey",
+                       $sshHost, "pkill -f '$pattern'")
+            try { Start-Process -FilePath $ssh.Path -WindowStyle Hidden -ArgumentList $kargs } catch { }
+        }
+    }
+    $script:trackedPid = 0
 }
 
 function ShowLogs {
@@ -194,7 +262,12 @@ if (-not $NoTray) {
     $start = $menu.Items.Add('Start Server')
     $start.Add_Click({
             Start-Dsh
-            $notify.ShowBalloonTip(3000, 'DSH Web', "Starting server on http://127.0.0.1:$port ...", 'Info')
+            $msg = if ($mode -eq 'remote') {
+                "Starting cloud server + tunnel for http://127.0.0.1:$port ..."
+            } else {
+                "Starting server on http://127.0.0.1:$port ..."
+            }
+            $notify.ShowBalloonTip(3000, 'DSH Web', $msg, 'Info')
         })
 
     $stop = $menu.Items.Add('Stop Server')
