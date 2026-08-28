@@ -3,7 +3,8 @@
 # icon as the control surface: start / stop / restart / open UI / show logs,
 # plus a launch-at-login toggle.
 #
-# Usage: edit the CONFIG block below, then run:
+# Usage: (optional) copy dsh-tray.config.example.ps1 to dsh-tray.config.ps1 and
+# edit it, then run:
 #   powershell -File dsh-tray.ps1
 # (or double-click it). To load the functions without showing the tray
 # (used by tests), run from PowerShell:  $NoTray = $true; . .\dsh-tray.ps1
@@ -19,18 +20,22 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# ===== CONFIG (edit here) =====
+# ===== CONFIG =====
+# User config lives in dsh-tray.config.ps1 next to this script. Copy
+# dsh-tray.config.example.ps1 to that name and edit it. It is NOT tracked by
+# git, so your host/key paths stay local. If it is missing, the defaults below
+# are used. Any value the config file sets overrides the matching default.
+$scriptDir = try { Split-Path -Parent $MyInvocation.MyCommand.Definition } catch { $null }
+if (-not $scriptDir) { $scriptDir = $PSScriptRoot }
+$configFile = Join-Path $scriptDir 'dsh-tray.config.ps1'
+
+# --- defaults (overridden by dsh-tray.config.ps1 when present) ---
 $port = 3080
-# Root of the DeepSeek Harness repo. The server is started from here, because
-# `apps/cli/src/bin.ts` is a relative path and `tsx` must resolve from this
-# repo's node_modules. Change this to your harness checkout.
+# Root of the DeepSeek Harness repo (local mode). The server is started from
+# here so apps/cli/src/bin.ts and tsx resolve correctly.
 $workDir = 'E:\2026Workplace\Code\deepseek-harness'
-# Command to start the DSH Web server when it is not running. The first
-# element is resolved via PATH (including .cmd/.ps1 via PATHEXT); the rest are
-# its arguments. Examples (run from $workDir):
-#   @('node', '--import', 'tsx/esm', 'apps/cli/src/bin.ts', 'web', '--port', $port)
-#   @('pnpm', 'dsh', 'web', '--port', $port)
-#   @('dsh', 'web', '--port', $port)              # if `dsh` is on PATH
+# Command to start the server locally (local mode). The first element is
+# resolved via PATH; the rest are its arguments.
 $startCommand = @('node', '--import', 'tsx/esm', 'apps/cli/src/bin.ts', 'web', '--port', $port)
 # Log files for the server output (used by "Show Logs").
 $logOut = Join-Path $env:TEMP 'dsh-tray.out.log'
@@ -39,16 +44,18 @@ $logErr = Join-Path $env:TEMP 'dsh-tray.err.log'
 $autoStart = $true
 # How often (ms) the tray re-checks the server port to refresh icon/menu state.
 $pollIntervalMs = 3000
-# Backend mode: 'local' runs the server on this machine; 'remote' launches it on a
-# cloud host over SSH and opens a local tunnel so the Web UI is at 127.0.0.1:$port.
-$mode = 'remote'
+# 'local' runs the server on this machine; 'remote' launches it on a cloud host
+# over SSH and tunnels it to 127.0.0.1:$port.
+$mode = 'local'
 # --- remote mode config (only used when $mode = 'remote') ---
-$sshHost = 'ubuntu@ec2-16-16-138-7.eu-north-1.compute.amazonaws.com'  # user@host
-$sshKey  = Join-Path $env:USERPROFILE '.ssh\DSH.pem'                   # identity file
+$sshHost = 'ubuntu@your-cloud-host.example.com'   # user@host
+$sshKey  = Join-Path $env:USERPROFILE '.ssh\DSH.pem'  # identity file
 # Remote command that starts the server (must bind 127.0.0.1 so the tunnel reaches it).
 $remoteStartCommand = 'dsh web --port ' + $port
 # Also kill the server on the cloud host when stopping (otherwise it keeps running).
 $stopRemoteServer = $true
+# Load the user config last so any value it sets overrides the defaults above.
+if (Test-Path -LiteralPath $configFile) { . $configFile }
 # ============================
 
 $wt = Get-Command wt.exe -ErrorAction SilentlyContinue

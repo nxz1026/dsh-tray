@@ -9,7 +9,9 @@ Web UI / tail logs.
 ## Quick start
 
 1. Download or clone this repo.
-2. (Optional) edit the `CONFIG` block at the top of `assets/dsh-tray.ps1`:
+2. (Optional) copy `assets/dsh-tray.config.example.ps1` to
+   `assets/dsh-tray.config.ps1` and edit it. The config file is git-ignored,
+   so your host/key paths stay local; built-in defaults apply if you skip this.
    - `$port` — server port (default `3080`).
    - `$startCommand` — the command that launches `dsh web` (must be on `PATH`).
    - `$autoStart` — start the server on launch if it is not already running.
@@ -24,7 +26,8 @@ Web UI / tail logs.
    the server. (`dsh-tray.bat` is kept as a fallback and also routes through the
    VBS file.)
 
-Configuration: edit the `CONFIG` block at the top of `assets/dsh-tray.ps1`:
+Configuration: all values live in `assets/dsh-tray.config.ps1` (copy from the
+example). Defaults in `assets/dsh-tray.ps1` are used for any value you omit:
 - `$workDir` — your DeepSeek Harness repo root. The server is started from
   here so `apps/cli/src/bin.ts` and `tsx` resolve correctly.
 - `$startCommand` — the command that starts the server (default launches the
@@ -104,7 +107,9 @@ DeepSeek Harness Web 的 Windows 系统托盘启动器。无需安装:下载(或
 ## 快速开始
 
 1. 下载或克隆本仓库。
-2. (可选)编辑 `assets/dsh-tray.ps1` 顶部的 `CONFIG` 配置区:
+2. (可选)将 `assets/dsh-tray.config.example.ps1` 复制为
+   `assets/dsh-tray.config.ps1` 并编辑。该配置文件已被 git 忽略,
+   你的 host/key 路径不会进版本库;若跳过,则使用脚本内置默认值。
    - `$port` — 服务端口(默认 `3080`)。
    - `$startCommand` — 启动 `dsh web` 的命令(需在 `PATH` 中)。
    - `$autoStart` — 若服务未运行,启动时自动拉起。
@@ -117,7 +122,8 @@ DeepSeek Harness Web 的 Windows 系统托盘启动器。无需安装:下载(或
    出现任何命令行窗口**)。DSH Web 服务以无窗口方式启动,托盘图标随即出现。
    右键图标即可控制服务。(`dsh-tray.bat` 保留作后备,同样会路由到 VBS 文件。)
 
-配置:编辑 `assets/dsh-tray.ps1` 顶部的 `CONFIG` 配置区:
+配置:所有配置项都在 `assets/dsh-tray.config.ps1`(从示例文件复制而来)。
+未在文件中写出的项会使用 `assets/dsh-tray.ps1` 中的默认值:
 - `$workDir` — 你的 DeepSeek Harness 仓库根目录。服务从这里启动,
   这样 `apps/cli/src/bin.ts` 与 `tsx` 才能正确解析。
 - `$startCommand` — 启动服务的命令(默认用

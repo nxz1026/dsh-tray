@@ -1,3 +1,5 @@
 node_modules/
 *.log
 .DS_Store
+# User config (git-ignored; copy dsh-tray.config.example.ps1 to this name)
+assets/dsh-tray.config.ps1
