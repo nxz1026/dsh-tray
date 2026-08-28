@@ -41,7 +41,7 @@ $autoStart = $true
 $pollIntervalMs = 3000
 # Backend mode: 'local' runs the server on this machine; 'remote' launches it on a
 # cloud host over SSH and opens a local tunnel so the Web UI is at 127.0.0.1:$port.
-$mode = 'local'
+$mode = 'remote'
 # --- remote mode config (only used when $mode = 'remote') ---
 $sshHost = 'ubuntu@ec2-16-16-138-7.eu-north-1.compute.amazonaws.com'  # user@host
 $sshKey  = Join-Path $env:USERPROFILE '.ssh\DSH.pem'                   # identity file
