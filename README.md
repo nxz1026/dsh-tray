@@ -63,6 +63,11 @@ Windows Terminal tab that tails the server log.
 ### Remote mode (cloud host over SSH)
 
 Set `$mode = 'remote'` and fill in `$sshHost`, `$sshKey`, `$remoteStartCommand`.
+The launcher prepends `/usr/local/bin:/usr/bin:/bin` to the remote PATH so `dsh`
+(often at `/usr/local/bin/dsh`) is found even in a non-login SSH session that
+starts with an empty PATH. If your `dsh` lives elsewhere, set
+`$remoteStartCommand` to its absolute path. Server logs are written on the cloud
+host and shown by "Show Logs" (it tails `/tmp/dsh-tray.out.log` over SSH).
 "Start" then runs `ssh -f -L $port:127.0.0.1:$port <host> "nohup <remoteStartCommand> &"`
 — one command that boots the server on the cloud **and** keeps a local tunnel
 alive, so the Web UI is reachable at `http://127.0.0.1:$port` exactly like local
@@ -156,6 +161,10 @@ Windows Terminal 标签页实时追踪服务日志。
 ### 远程模式（云端主机 + SSH）
 
 将 `$mode` 设为 `remote` 并填好 `$sshHost`、`$sshKey`、`$remoteStartCommand`。
+启动器会在远程 PATH 前补上 `/usr/local/bin:/usr/bin:/bin`，这样即便非登录的
+SSH 会话 PATH 为空也能找到 `dsh`（通常在 `/usr/local/bin/dsh`）。若你的 `dsh`
+在其他位置，请把 `$remoteStartCommand` 写成绝对路径。服务日志写在云端主机上，
+由「查看日志」通过 SSH 拉取 `/tmp/dsh-tray.out.log` 显示。
 点「启动」会执行 `ssh -f -L $port:127.0.0.1:$port <host> "nohup <remoteStartCommand> &"`——
 这一条命令既在云端拉起服务，又保持本地隧道常驻，于是 Web UI 通过
 `http://127.0.0.1:$port` 访问，与本地模式完全一致。托盘的端口轮询、状态图标、

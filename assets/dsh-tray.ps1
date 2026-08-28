@@ -74,7 +74,16 @@ function Get-PortOwnerPids {
 }
 
 function Get-DshRunning {
-    (Get-PortOwnerPids).Count -gt 0
+    if (-not (Get-PortOwnerPids).Count) { return $false }
+    # In remote mode the listening port is just the ssh tunnel; verify the server
+    # actually answers so the icon does not go green when only the tunnel is up.
+    if ($mode -eq 'remote') {
+        try {
+            $r = Invoke-WebRequest -Uri "http://127.0.0.1:$port" -TimeoutSec 2 -UseBasicParsing -ErrorAction SilentlyContinue
+            return ($null -ne $r)
+        } catch { return $false }
+    }
+    return $true
 }
 
 function Start-Dsh {
@@ -113,9 +122,11 @@ function Start-RemoteDsh {
     }
     # Start the server on the cloud host in the background, then keep this ssh
     # process alive as the local tunnel (-f backgrounds after the remote command).
-    $remoteCmd = "nohup $remoteStartCommand >/tmp/dsh-tray.out.log 2>&1 &"
+    # The remote non-login shell often has an empty PATH, so prepend the standard
+    # dirs (where dsh lives, e.g. /usr/local/bin) before the user's command.
+    $remoteCmd = "export PATH=/usr/local/bin:/usr/bin:/bin:`$PATH; nohup $remoteStartCommand >/tmp/dsh-tray.out.log 2>&1 &"
     $args = @('-f', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ExitOnForwardFailure=yes',
-              '-i', "$sshKey", '-L', ('{0}:127.0.0.1:{0}' -f $port), $sshHost, $remoteCmd)
+              '-E', "$logErr", '-i', "$sshKey", '-L', ('{0}:127.0.0.1:{0}' -f $port), $sshHost, $remoteCmd)
     $proc = Start-Process -FilePath $ssh.Path -WindowStyle Hidden -ArgumentList $args -PassThru
     if ($proc) { $script:trackedPid = $proc.Id }
 }
@@ -189,6 +200,18 @@ function Stop-RemoteDsh {
 }
 
 function ShowLogs {
+    if ($mode -eq 'remote') {
+        # Tail the server log on the cloud host (written by the remote command).
+        $rk = @('-o', 'StrictHostKeyChecking=accept-new', '-i', "$sshKey", $sshHost,
+                "tail -n 50 /tmp/dsh-tray.out.log")
+        $cmd = 'ssh ' + ($rk -join ' ')
+        if ($wt) {
+            Start-Process -FilePath $wt.Path -ArgumentList @('powershell', '-NoProfile', '-Command', $cmd)
+        } else {
+            Start-Process -FilePath 'powershell' -ArgumentList @('-NoProfile', '-Command', $cmd)
+        }
+        return
+    }
     if ($wt) {
         Start-Process -FilePath $wt.Path -ArgumentList @(
             'powershell', '-NoProfile', '-Command', "Get-Content -LiteralPath '$logOut' -Wait -Tail 50"
